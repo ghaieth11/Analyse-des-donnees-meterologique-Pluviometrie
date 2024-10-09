@@ -1,0 +1,191 @@
+---
+title: "Analyse_Métérologique"
+author: "ALOUI Ghaieth - POLYTECH Nice Sophia"
+date: "2024-10-09"
+output:
+  html_document:
+    df_print: paged
+  toc: true
+  toc_depth: 3
+  pdf_document: null
+---
+
+Après avoir téléchargé le fichier `meteo_nice.csv`, nous allons réaliser différentes manipulations sur ce fichier pour répondre aux questions du sujet.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tibble)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+```
+
+# 1. Charger les données et les convertir en tibble
+
+```{r}
+# Charger le fichier CSV en tant que data.frame en spécifiant l'encodage UTF-8
+data_frame_meteo <- read.csv("meteo_nice.csv", encoding = "UTF-8", sep = ";")
+
+# Convertir le data.frame en tibble
+meteo <- as_tibble(data_frame_meteo)
+
+# 2. Sélectionner et renommer les variables spécifiées
+meteo <- meteo %>%
+  select(Date, Précipitations.dans.les.3.dernières.heures, mois_de_l_annee) %>%
+  rename(prec_3 = Précipitations.dans.les.3.dernières.heures,
+         mois = mois_de_l_annee)
+
+
+# 3. Convertir la variable Date en POSIXct et trier les observations
+# Convertir les dates en format POSIXct
+meteo$Date <- as.POSIXct(strptime(substr(meteo$Date, 1, 10), format = "%Y-%m-%d"))
+
+# Ordonner les observations par date croissante
+meteo <- arrange(meteo, Date)
+
+# 4. Créer une variable jour indiquant le jour de l'année
+# Créer la variable jour
+meteo$jour <- as.numeric(format(meteo$Date, "%j"))
+
+
+# 5. Sélectionner et renommer les variables spécifiées
+# Créer le tibble avec le cumul des précipitations par jour
+precipitation <- meteo %>%
+  group_by(Date, mois, jour) %>%
+  summarise(prec = sum(prec_3, na.rm = TRUE))
+
+
+# 6. Calculer la fréquence des jours avec précipitations non nulles
+## a) Nombre total d'observations par mois
+N_mois <- precipitation %>%
+  group_by(mois) %>%
+  summarise(N_mois = n())
+
+## b) Nombre d'observations avec précipitations positives par mois
+
+N_mois_prec <- precipitation %>%
+  filter(prec > 0) %>%
+  group_by(mois) %>%
+  summarise(N_mois_prec = n())
+```
+
+## c) Calculer la fréquence
+
+```{r}
+freq_prec <- merge(N_mois, N_mois_prec, by = "mois", all.x = TRUE) %>%
+  mutate(freq_prec = N_mois_prec / N_mois)
+freq_prec
+
+```
+
+# 7. Sélectionner la précipitation maximale
+
+```{r}
+# Trouver l'observation avec la précipitation maximale
+max_prec <- precipitation %>%
+  arrange(desc(prec)) %>%
+  slice(1)
+max_prec
+
+
+# 8. Affichage graphique des précipitations journalières
+# Filtrer les précipitations positives
+precip_positives <- precipitation %>%
+  filter(prec > 0)
+
+# Graphique des précipitations journalières
+ggplot(precip_positives, aes(x = jour, y = prec)) +
+  geom_point(color = "green") +
+  geom_hline(yintercept = max(precip_positives$prec), color = "red", linetype = "dashed") +
+  labs(x = "Jour de l'année", y = "Précipitation (mm)", title = "Précipitations journalières") +
+  theme_minimal() +
+  scale_x_continuous(breaks = c(1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335),
+                     labels = c("Jan", "Fév", "Mars", "Avr", "Mai", "Juin",
+                                "Juil", "Août", "Sept", "Oct", "Nov", "Déc"))
+
+
+# 9. Création de la fonction roll_sum
+# Fonction pour calculer les sommes glissantes
+roll_sum <- function(x, k) {
+  n <- length(x)
+  y <- numeric(n)
+  for (i in 1:(n - k + 1)) {
+    y[i] <- sum(x[i:(i + k - 1)], na.rm = TRUE)
+  }
+  y[(n - k + 2):n] <- NA  # Remplir les derniers éléments de y avec NA
+  return(y)
+}
+
+
+# 10. Calcul des cumuls sur 2 et 7 jours
+## a) Calculer les cumuls glissants
+# Cumul glissant sur 2 jours
+precipitations_2j <- roll_sum(precipitation$prec, k = 2)
+
+# Cumul glissant sur 7 jours
+precipitations_7j <- roll_sum(precipitation$prec, k = 7)
+
+## b) Éliminer les NA
+precipitations_2j <- na.omit(precipitations_2j)
+precipitations_7j <- na.omit(precipitations_7j)
+
+```
+
+## c) Calculer les cumuls maximaux
+
+```{r}
+max_cumul_2j <- max(precipitations_2j)
+max_cumul_7j <- max(precipitations_7j)
+
+```
+
+## d) Extraire les dates des cumuls maximaux
+
+```{r}
+date_max_cumul_2j <- precipitation$Date[which.max(precipitations_2j)]
+date_max_cumul_7j <- precipitation$Date[which.max(precipitations_7j)]
+
+```
+
+# 11. Graphique final avec cumuls maximaux
+
+```{r} 
+# Charger le package lubridate pour utiliser la fonction yday()
+library(lubridate)
+
+# Calcul de la moyenne des précipitations
+mean_precip <- mean(precipitation$prec, na.rm = TRUE)
+
+# Créer un data frame pour les cumuls maximaux
+max_cumul_df <- data.frame(
+  Date = c(date_max_cumul_2j, date_max_cumul_7j),
+  prec = c(max_cumul_2j, max_cumul_7j),
+  type = c("Max 2j", "Max 7j")
+)
+
+# Créer le graphique avec les cumuls maximaux et la moyenne empirique
+ggplot(data = precipitation, aes(x = jour, y = prec)) +
+  geom_col(fill = "blue", width = 0.5, alpha = 0.6) +
+  geom_point(data = precip_positives, aes(x = jour, y = prec), color = "green") +
+  geom_point(data = max_cumul_df, aes(x = yday(Date), y = prec, color = type), size = 3) +
+  geom_hline(yintercept = mean_precip, linetype = "dashed", color = "orange") +
+  labs(
+    title = "Précipitations journalières avec cumuls maximaux",
+    x = "Jour de l'année",
+    y = "Précipitations (mm)",
+    caption = "Cumuls maximaux sur 2 et 7 jours, moyenne empirique du nombre de jours avec précipitations positives par mois"
+  ) +
+  theme_minimal() +
+  scale_x_continuous(
+    breaks = c(1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335),
+    labels = c("Jan", "Fév", "Mars", "Avr", "Mai", "Juin",
+               "Juil", "Août", "Sept", "Oct", "Nov", "Déc")
+  ) +
+  scale_color_manual(
+    values = c("Max 2j" = "red", "Max 7j" = "green"),
+    name = "Cumuls Maximaux"
+  )
+
+```
+
+
