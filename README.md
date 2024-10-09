@@ -53,3 +53,7 @@ Un graphique montre la distribution des précipitations journalières tout au lo
 ## Conclusion
 
 Cette analyse fournit des informations précieuses sur la répartition des précipitations à Nice au cours de l'année, en mettant en lumière les périodes les plus humides et les événements de précipitations les plus intenses. L'utilisation des fonctions de manipulation de données et de visualisation en R permet de traiter efficacement ces données et de les rendre interprétables pour l'analyse météorologique.
+
+## Auteur
+
+Ce projet a été réalisé par **ALOUI Ghaieth**, étudiant en **Mathématiques Appliquées et Modélisation** à **POLYTECH Nice Sophia** – **Université Côte d'Azur**
